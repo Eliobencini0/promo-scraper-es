@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
+import robots
 from config import (
     BASE_URL, CATEGORIES, MAX_CATEGORY_PAGES, REQUEST_TIMEOUT,
     SITEMAP_INDEX_URL, USER_AGENT,
@@ -19,6 +20,8 @@ HEADERS = {"User-Agent": USER_AGENT}
 
 
 def _get(url: str) -> str | None:
+    if not robots.allowed(url):
+        return None
     try:
         r = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
         if r.status_code == 200:

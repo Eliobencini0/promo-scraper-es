@@ -1,0 +1,19 @@
+# promo-scraper-es
+
+> Python CLI that collects active contests, cashback offers and brand promotions in Spain from regalosymuestrasgratis.com and from each brand's own landing page and legal terms, and writes one structured row per promotion to an XLSX file. Core rule: never invent a value; anything not extractable with an explicit rule stays empty and is listed in a `_confidence` column. Single-author prototype, run by hand weekly, no tests, data not included in the repo.
+
+## Start here
+- [README.md](README.md): what it does, the pipeline, design decisions, how to run, known limits
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): module map, per-article decisions, state files, failure behavior
+- [docs/DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md): every output column, its source and what an empty cell means
+
+## Key code
+- [scraper.py](scraper.py): CLI and `process_one()`, the per-article pipeline
+- [extractor.py](extractor.py): `build_row()`, one rule and one confidence flag per field
+- [validity.py](validity.py): what counts as an active promotion (confident future end date)
+- [robots.py](robots.py): robots.txt check used by every network call
+
+## Notes for a reviewer
+- Product thinking visible in the code: skip rather than guess; separate machine fields from editorial fields; prefer the primary source (the brand's legal terms) over the blog text; cache dead URLs for 30 days.
+- Responsible scraping: robots.txt is respected, the user agent identifies the project, no anti-bot evasion.
+- Limits stated in the README: layout-dependent selectors, two filters hard-coded to 2026, no automated tests.

@@ -114,7 +114,7 @@ def main() -> int:
     ap.add_argument("--push-sheets", action="store_true", help="Push to Google Sheets")
     ap.add_argument("--limit", type=int, default=0, help="Cap number of new articles to process")
     ap.add_argument("--debug", action="store_true", help="Dump intermediate texts to data/runs/")
-    ap.add_argument("--headed", action="store_true", help="Run Playwright with visible Chromium (helps bypass Akamai/anti-bot)")
+    ap.add_argument("--headed", action="store_true", help="Run Playwright with a visible Chromium window (debugging)")
     ap.add_argument("--count-only", action="store_true", help="Discover + apply filters (no Playwright). Print counts and exit.")
     ap.add_argument("--from-queue", action="store_true", help="Skip discovery; scrape only URLs saved by a previous --count-only (data/active_queue.json).")
     ap.add_argument("--no-cache", action="store_true", help="Ignore seen_cache.json (force re-check of every URL).")

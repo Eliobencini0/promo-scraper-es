@@ -4,7 +4,7 @@ from pathlib import Path
 BASE_URL = "https://regalosymuestrasgratis.com"
 SITEMAP_INDEX_URL = f"{BASE_URL}/sitemap.xml"
 
-USER_AGENT = "promo-scraper-es/0.1 (+contact)"
+USER_AGENT = "promo-scraper-es/0.1 (+https://github.com/Eliobencini0/promo-scraper-es)"
 REQUEST_TIMEOUT = 20
 RATE_LIMIT_SECONDS = 1.0
 

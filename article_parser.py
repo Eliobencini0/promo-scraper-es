@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
+import robots
 from config import REQUEST_TIMEOUT, USER_AGENT
 
 log = logging.getLogger(__name__)
@@ -35,6 +36,8 @@ class Article:
 
 
 def fetch(url: str) -> str | None:
+    if not robots.allowed(url):
+        return None
     try:
         r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=REQUEST_TIMEOUT)
         if r.status_code == 200:

@@ -10,12 +10,8 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+import robots
 from config import REQUEST_TIMEOUT, USER_AGENT
-
-REALISTIC_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-)
 
 log = logging.getLogger(__name__)
 
@@ -100,23 +96,19 @@ def fetch_brand_session(
     if bases_url and not bases_is_html:
         bases_pdf = fetch_bases_legales(bases_url)
 
-    target_host = urlparse(participar_url).hostname or ""
-    warmup_url = f"https://{target_host}/" if target_host else None
+    landing_ok = robots.allowed(participar_url)
+    if not landing_ok and not (bases_url and bases_is_html):
+        return None, bases_pdf
 
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=not headed)
+            # Honest identity: the project's own user agent, no webdriver masking, no stealth plugin.
             ctx = browser.new_context(
-                user_agent=REALISTIC_UA,
+                user_agent=USER_AGENT,
                 locale="es-ES",
-                timezone_id="Europe/Madrid",
                 viewport={"width": 1366, "height": 800},
                 extra_http_headers={"Accept-Language": "es-ES,es;q=0.9"},
-            )
-            ctx.add_init_script(
-                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
-                "Object.defineProperty(navigator,'languages',{get:()=>['es-ES','es']});"
-                "Object.defineProperty(navigator,'plugins',{get:()=>[1,2,3,4,5]});"
             )
 
             def route(r):
@@ -128,41 +120,12 @@ def fetch_brand_session(
             ctx.route("**/*", route)
 
             page = ctx.new_page()
-            try:
-                try:
-                    from playwright_stealth import Stealth
-                    Stealth().apply_stealth_sync(page)
-                except ImportError:
-                    try:
-                        from playwright_stealth import stealth_sync
-                        stealth_sync(page)
-                    except ImportError:
-                        pass
-            except Exception as e:
-                log.warning("stealth apply failed: %s", e)
-
             page.set_default_timeout(30_000)
-
-            # ---- Warm-up: visit brand home, accept cookies, idle a bit ----
-            if warmup_url:
-                try:
-                    log.info("warm-up: %s", warmup_url)
-                    page.goto(warmup_url, wait_until="domcontentloaded")
-                    page.wait_for_timeout(2000)
-                    _try_dismiss_cookies(page)
-                    page.wait_for_timeout(1500)
-                    # Light human-ish interaction
-                    try:
-                        page.mouse.move(400, 300)
-                        page.mouse.wheel(0, 600)
-                        page.wait_for_timeout(800)
-                    except Exception:
-                        pass
-                except Exception as e:
-                    log.warning("warm-up failed: %s", e)
 
             # ---- Landing ----
             try:
+                if not landing_ok:
+                    raise PermissionError("blocked by robots.txt")
                 log.info("landing goto: %s", participar_url)
                 try:
                     page.goto(participar_url, wait_until="networkidle")
@@ -180,7 +143,7 @@ def fetch_brand_session(
                 log.warning("landing failed: %s", e)
 
             # ---- Bases legales (HTML in same session) ----
-            if bases_url and bases_is_html:
+            if bases_url and bases_is_html and robots.allowed(bases_url):
                 try:
                     log.info("bases goto: %s", bases_url)
                     try:
@@ -211,25 +174,16 @@ def _render(url: str, *, block_images: bool = False) -> tuple[str, str] | None:
     except ImportError:
         log.warning("playwright not installed")
         return None
-    realistic_ua = (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-    )
+    if not robots.allowed(url):
+        return None
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             ctx = browser.new_context(
-                user_agent=realistic_ua,
+                user_agent=USER_AGENT,
                 locale="es-ES",
-                timezone_id="Europe/Madrid",
                 viewport={"width": 1366, "height": 800},
                 extra_http_headers={"Accept-Language": "es-ES,es;q=0.9"},
-            )
-            # Hide webdriver flag — Akamai/Cloudflare check this
-            ctx.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-                "Object.defineProperty(navigator, 'languages', {get: () => ['es-ES','es']});"
-                "Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});"
             )
 
             def route(r):
@@ -240,18 +194,6 @@ def _render(url: str, *, block_images: bool = False) -> tuple[str, str] | None:
 
             ctx.route("**/*", route)
             page = ctx.new_page()
-            # Stealth v2: Stealth().apply_stealth_sync(page). v1: stealth_sync(page).
-            try:
-                try:
-                    from playwright_stealth import Stealth  # v2
-                    Stealth().apply_stealth_sync(page)
-                except ImportError:
-                    from playwright_stealth import stealth_sync  # v1
-                    stealth_sync(page)
-            except ImportError:
-                log.warning("playwright-stealth not installed; running without stealth")
-            except Exception as e:
-                log.warning("stealth apply failed: %s", e)
             page.set_default_timeout(25_000)
             try:
                 page.goto(url, wait_until="networkidle")
@@ -361,6 +303,8 @@ def fetch_landing_with_playwright(url: str) -> Landing:
 
 def _fetch_landing_static(url: str) -> Landing:
     landing = Landing(url=url)
+    if not robots.allowed(url):
+        return landing
     try:
         r = requests.get(url, headers=_headers(), timeout=REQUEST_TIMEOUT)
         if r.status_code != 200:
@@ -382,6 +326,8 @@ def _is_pdf_url(url: str, content_type: str = "") -> bool:
 
 def fetch_bases_legales(url: str) -> BasesLegales:
     bl = BasesLegales(url=url)
+    if not robots.allowed(url):
+        return bl
     # HEAD first to decide PDF vs HTML without downloading body
     try:
         head = requests.head(url, headers=_headers(), timeout=REQUEST_TIMEOUT, allow_redirects=True)
